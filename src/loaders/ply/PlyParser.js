@@ -3,13 +3,14 @@ import { UncompressedSplatArray } from '../UncompressedSplatArray.js';
 import { CompressedPlyParser } from './CompressedPlyParser.js';
 import { SplatBuffer } from '../SplatBuffer.js';
 import { clamp } from '../../Util.js';
+import { PlyShHeader } from './PlyShHeader.js';
 
 export class PlyParser {
 
     static HeaderEndToken = 'end_header';
 
     static Fields = ['scale_0', 'scale_1', 'scale_2', 'rot_0', 'rot_1', 'rot_2', 'rot_3',
-                     'x', 'y', 'z', 'f_dc_0', 'f_dc_1', 'f_dc_2', 'red', 'green', 'blue', 'opacity'];
+                     'x', 'y', 'z', 'f_dc_0', 'f_dc_1', 'f_dc_2', 'red', 'green', 'blue', 'opacity'].concat(PlyShHeader.SH_HEADERS);
 
     static checkTextForEndHeader(endHeaderTestText) {
         if (endHeaderTestText.includes(PlyParser.HeaderEndToken)) {
@@ -159,6 +160,15 @@ export class PlyParser {
             outColor[1] = parsedSplat[UncompressedSplatArray.OFFSET.FDC1];
             outColor[2] = parsedSplat[UncompressedSplatArray.OFFSET.FDC2];
             outColor[3] = parsedSplat[UncompressedSplatArray.OFFSET.OPACITY];
+
+            // added SH data
+            if (parsedSplat[UncompressedSplatArray.OFFSET.F_REST] !== 'undefined') {
+                const outFrest = new Float32Array(toBuffer, outBase + outBytesPerCenter + outBytesPerScale + outBytesPerRotation + 4, PlyShHeader.getSize());
+
+                for (let j = 0, m = PlyShHeader.getSize(); j < m; j++) {
+                    outFrest[j] = parsedSplat[UncompressedSplatArray.OFFSET.F_REST + j];
+                }
+            }
         }
     }
 
@@ -215,6 +225,19 @@ export class PlyParser {
             newSplat[UncompressedSplatArray.OFFSET.X] = rawVertex['x'];
             newSplat[UncompressedSplatArray.OFFSET.Y] = rawVertex['y'];
             newSplat[UncompressedSplatArray.OFFSET.Z] = rawVertex['z'];
+
+            let nRestCoeffs = 0;
+            for (const propertyName in header.propertyTypes) {
+                if (propertyName.startsWith('f_rest_')) {
+                    nRestCoeffs += 1;
+                }
+            }
+            const nCoeffsPerColors = nRestCoeffs / 3;
+            for (let i = 0; i < nCoeffsPerColors; ++i) {
+                for (let rgb = 0; rgb < 3; rgb++) {
+                    newSplat[UncompressedSplatArray.OFFSET.F_REST + (i * 3 + rgb)] = rawVertex[`f_rest_${rgb * nCoeffsPerColors + i}`];
+                }
+            }
 
             return newSplat;
         };
