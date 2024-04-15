@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { UncompressedSplatArray } from './UncompressedSplatArray.js';
 import { clamp } from '../Util.js';
-import { SH_DATA_ELEMENTS_PER_SPLAT } from '../SplatMesh.js';
 import { PlyShHeader } from './ply/PlyShHeader.js';
 
 /**

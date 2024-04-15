@@ -1,8 +1,8 @@
 {
-    "name": "@mkkellogg/gaussian-splats-3d",
+    "name": "@joongho-park/gaussian-splats-3d",
     "repository": {
         "type": "git",
-        "url": "https://github.com/mkkellogg/GaussianSplats3D"
+        "url": "https://github.com/joongho-park/GaussianSplats3D"
     },
     "version": "0.3.8",
     "description": "Three.js-based 3D Gaussian splat viewer",
@@ -12,14 +12,14 @@
     "license": "MIT",
     "type": "module",
     "scripts": {
-        "build-demo": "mkdir -p ./build/demo && cp -r ./demo ./build/ && cp ./node_modules/three/build/three.module.js ./build/demo/lib/three.module.js",
-        "build-library": "npx rollup -c && mkdir -p ./build/demo/lib && cp ./build/gaussian-splats-3d.module.* ./build/demo/lib/",
         "build": "npm run build-library && npm run build-demo",
+        "build-demo": "(if not exist \".\\build\\demo\" mkdir .\\build\\demo) && xcopy /Y /E .\\demo .\\build\\demo && xcopy /Y .\\node_modules\\three\\build\\three.module.js .\\build\\demo\\lib\\",
         "build-demo-windows": "(if not exist \".\\build\\demo\" mkdir .\\build\\demo) && xcopy /E .\\demo .\\build\\demo && xcopy .\\node_modules\\three\\build\\three.module.js .\\build\\demo\\lib\\",
+        "build-library": "npx rollup -c && (if not exist \".\\build\\demo\\lib\" mkdir .\\build\\demo\\lib) && copy /Y .\\build\\gaussian-splats-3d* .\\build\\demo\\lib\\",
         "build-library-windows": "npx rollup -c && (if not exist \".\\build\\demo\\lib\" mkdir .\\build\\demo\\lib) && copy .\\build\\gaussian-splats-3d* .\\build\\demo\\lib\\",
         "build-windows": "npm run build-library-windows && npm run build-demo-windows",
-        "watch": "npx npm-watch ",
-        "demo": "node util/server.js -d ./build/demo",
+        "watch": "npx npm-watch",
+        "demo": "node --watch util/server.js -d ./build/demo",
         "fix-styling": "npx stylelint **/*.scss --fix",
         "fix-js": "npx eslint src --fix",
         "lint": "npx eslint 'src/**/*.js' || true",
