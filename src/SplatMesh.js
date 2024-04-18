@@ -99,6 +99,8 @@ export class SplatMesh extends THREE.Mesh {
         this.disposed = false;
         this.lastRenderer = null;
         this.visible = false;
+
+        this.controlsTargetVector = new THREE.Vector3();
     }
 
     /**
@@ -1173,7 +1175,7 @@ export class SplatMesh extends THREE.Mesh {
         const splatCount = this.getSplatCount();
         const tempCenter = new THREE.Vector3();
         if (!isUpdateBuild) {
-            const avgCenter = new THREE.Vector3();
+            const avgCenter = new THREE.Vector3(this.controlsTargetVector.x, this.controlsTargetVector.y, this.controlsTargetVector.z);
             this.scenes.forEach((scene) => {
                 avgCenter.add(scene.splatBuffer.sceneCenter);
             });

@@ -307,6 +307,10 @@ export class Viewer {
                 }
             }
             this.controls = this.camera.isOrthographicCamera ? this.orthographicControls : this.perspectiveControls;
+
+            // set object center for use SceneRevealMode center.
+            this.splatMesh.controlsTargetVector = this.controls.target;
+
             this.mouseMoveListener = this.onMouseMove.bind(this);
             this.renderer.domElement.addEventListener('pointermove', this.mouseMoveListener, false);
             this.mouseDownListener = this.onMouseDown.bind(this);
