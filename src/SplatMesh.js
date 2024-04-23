@@ -7,6 +7,7 @@ import { uintEncodedFloat, rgbaArrayToInteger } from './Util.js';
 import { Constants } from './Constants.js';
 import { SceneRevealMode } from './SceneRevealMode.js';
 import { LogLevel } from './LogLevel.js';
+import { PlyShHeader } from './loaders/ply/PlyShHeader.js';
 
 const dummyGeometry = new THREE.BufferGeometry();
 const dummyMaterial = new THREE.MeshBasicMaterial();
@@ -17,6 +18,7 @@ const CENTER_COLORS_ELEMENTS_PER_SPLAT = 4;
 const COVARIANCES_ELEMENTS_PER_TEXEL = 2;
 const CENTER_COLORS_ELEMENTS_PER_TEXEL = 4;
 const TRANSFORM_INDEXES_ELEMENTS_PER_TEXEL = 1;
+const SH_COLORS_ELEMENTS_PER_TEXEL = PlyShHeader.getSHColorPerTexel();
 
 const SCENE_FADEIN_RATE_FAST = 0.012;
 const SCENE_FADEIN_RATE_GRADUAL = 0.003;
@@ -100,10 +102,13 @@ export class SplatMesh extends THREE.Mesh {
 
         this.splatScale = 1.0;
         this.pointCloudModeEnabled = false;
+        this.shDegree = 0;
 
         this.disposed = false;
         this.lastRenderer = null;
         this.visible = false;
+
+        this.controlsTargetVector = new THREE.Vector3();
     }
 
     /**
@@ -128,6 +133,7 @@ export class SplatMesh extends THREE.Mesh {
 
             attribute uint splatIndex;
 
+            uniform highp sampler2D shDataTexture;
             uniform highp sampler2D covariancesTexture;
             uniform highp usampler2D centersColorsTexture;`;
 
@@ -156,12 +162,14 @@ export class SplatMesh extends THREE.Mesh {
             uniform int fadeInComplete;
             uniform vec3 sceneCenter;
             uniform float splatScale;
+            uniform int shDegree;
 
             varying vec4 vColor;
             varying vec2 vUv;
 
             varying vec2 vPosition;
 
+            uniform vec2 shDataTextureSize;
             const float sqrt8 = sqrt(8.0);
             const float minAlpha = 1.0 / 255.0;
 
@@ -181,6 +189,42 @@ export class SplatMesh extends THREE.Mesh {
                 samplerUV.y = float(floor(d)) / dimensions.y;
                 samplerUV.x = fract(d);
                 return samplerUV;
+            }
+            
+            #define k01 0.28209479177387814
+            #define k02 0.48860251190291987
+            #define k03 1.0925484305920792
+            #define k04 0.31539156525251999
+            #define k05 0.54627421529603959
+            #define k06 0.59004358992664352
+            #define k07 2.8906114426405538
+            #define k08 0.45704579946446572
+            #define k09 0.3731763325901154
+            #define k10 1.4453057213202769
+            
+            float SH_0_0 ( vec3 position) { return  k01; }
+            float SH_1_0 ( vec3 position) { vec3 n = position.xyz; return -k02 * n.y; }
+            float SH_1_1 ( vec3 position) { vec3 n = position.xyz; return  k02 * n.z; }
+            float SH_1_2 ( vec3 position) { vec3 n = position.xyz; return -k02 * n.x; }
+            float SH_2_0 ( vec3 position) { vec3 n = position.xyz; return  k03 * n.x * n.y; }
+            float SH_2_1 ( vec3 position) { vec3 n = position.xyz; return -k03 * n.y * n.z; }
+            float SH_2_2 ( vec3 position) { vec3 n = position.xyz; return  k04 * (2.0f * n.z * n.z - (n.x * n.x) - (n.y * n.y)); }
+            float SH_2_3 ( vec3 position) { vec3 n = position.xyz; return -k03 * n.x * n.z; }
+            float SH_2_4 ( vec3 position) { vec3 n = position.xyz; return  k05 * ((n.x * n.x) - (n.y * n.y)); }
+            float SH_3_0 ( vec3 position) { vec3 n = position.xyz; return -k06 * n.y * (3.0f * (n.x * n.x) - (n.y * n.y)); }
+            float SH_3_1 ( vec3 position) { vec3 n = position.xyz; return  k07 * n.z * n.y * n.x; }
+            float SH_3_2 ( vec3 position) { vec3 n = position.xyz; return -k08 * n.y * (4.0f * (n.z * n.z) - (n.x * n.x) - (n.y * n.y)); }
+            float SH_3_3 ( vec3 position) { vec3 n = position.xyz; return  k09 * n.z * (2.0f * (n.z * n.z) - 3.0f * (n.x * n.x) - 3.0f * (n.y * n.y)); }
+            float SH_3_4 ( vec3 position) { vec3 n = position.xyz; return -k08 * n.x * (4.0f * (n.z * n.z) - (n.x * n.x) - (n.y * n.y)); }
+            float SH_3_5 ( vec3 position) { vec3 n = position.xyz; return  k10 * n.z * ((n.x * n.x) - (n.y * n.y)); }
+            float SH_3_6 ( vec3 position) { vec3 n = position.xyz; return -k06 * n.x * ((n.x * n.x) -3.0f * (n.y * n.y)); }
+
+            vec3 getSHData(in sampler2D shTexture, in vec2 shTextureSize, int index) {
+                // 15 = sh rgba data per splat = (f_rest_012, f_rest_345, ...) + dummy alpha
+                // @see SplatBuffer.js #335
+                vec4 shColorData = texture(shTexture, getDataUV(15, index, shTextureSize));
+                
+                return shColorData.rgb;
             }
 
             void main () {
@@ -210,7 +254,39 @@ export class SplatMesh extends THREE.Mesh {
                 }
 
                 vPosition = position.xy;
-                vColor = uintToRGBAVec(sampledCenterColor.r);
+                
+                vec4 color = uintToRGBAVec(sampledCenterColor.r);
+                vec3 direction = splatCenter - cameraPosition;
+                vec3 pos = normalize(direction);
+                
+                vec3 factor = color.rgb - 0.5;
+                if (1 <= shDegree) {
+                    factor += SH_1_0(pos) * getSHData(shDataTexture, shDataTextureSize, 0);
+                    factor += SH_1_1(pos) * getSHData(shDataTexture, shDataTextureSize, 1);
+                    factor += SH_1_2(pos) * getSHData(shDataTexture, shDataTextureSize, 2);
+                
+                    if (2 <= shDegree) {
+                        factor += SH_2_0(pos) * getSHData(shDataTexture, shDataTextureSize, 3);
+                        factor += SH_2_1(pos) * getSHData(shDataTexture, shDataTextureSize, 4);
+                        factor += SH_2_2(pos) * getSHData(shDataTexture, shDataTextureSize, 5);
+                        factor += SH_2_3(pos) * getSHData(shDataTexture, shDataTextureSize, 6);
+                        factor += SH_2_4(pos) * getSHData(shDataTexture, shDataTextureSize, 7);
+                        
+                        if (3 <= shDegree) {
+                            factor += SH_3_0(pos) * getSHData(shDataTexture, shDataTextureSize, 8);
+                            factor += SH_3_1(pos) * getSHData(shDataTexture, shDataTextureSize, 9);
+                            factor += SH_3_2(pos) * getSHData(shDataTexture, shDataTextureSize, 10);
+                            factor += SH_3_3(pos) * getSHData(shDataTexture, shDataTextureSize, 11);
+                            factor += SH_3_4(pos) * getSHData(shDataTexture, shDataTextureSize, 12);
+                            factor += SH_3_5(pos) * getSHData(shDataTexture, shDataTextureSize, 13);
+                            factor += SH_3_6(pos) * getSHData(shDataTexture, shDataTextureSize, 14);
+                        }
+                    }
+                }
+                
+                factor += 0.5f;
+                
+                vColor = vec4(factor, color.a);
 
                 vec2 sampledCovarianceA = texture(covariancesTexture, getDataUV(3, 0, covariancesTextureSize)).rg;
                 vec2 sampledCovarianceB = texture(covariancesTexture, getDataUV(3, 1, covariancesTextureSize)).rg;
@@ -370,6 +446,8 @@ export class SplatMesh extends THREE.Mesh {
                 float opacity = exp(-0.5 * A) * vColor.a;
 
                 gl_FragColor = vec4(color.rgb, opacity);
+                
+                #include <tonemapping_fragment> 
             }`;
 
         const uniforms = {
@@ -448,6 +526,18 @@ export class SplatMesh extends THREE.Mesh {
             'pointCloudModeEnabled': {
                 'type': 'i',
                 'value': pointCloudModeEnabled ? 1 : 0
+            },
+            'shDataTexture': {
+                'type': 't',
+                'value': null
+            },
+            'shDataTextureSize': {
+                'type': 'v2',
+                'value': new THREE.Vector2(1024, 1024)
+            },
+            'shDegree': {
+                'type': 'i',
+                'value': 0,
             }
         };
 
@@ -668,6 +758,8 @@ export class SplatMesh extends THREE.Mesh {
 
         this.sceneOptions = sceneOptions;
         this.finalBuild = finalBuild;
+
+        this.getColorSHDegree(splatBuffers);
 
         const maxSplatCount = SplatMesh.getTotalMaxSplatCountForSplatBuffers(splatBuffers);
 
@@ -973,6 +1065,30 @@ export class SplatMesh extends THREE.Mesh {
             }
         };
 
+        // set up shData texture
+        if (1 <= this.shDegree) {
+            const shData = new Float32Array(maxSplatCount * PlyShHeader.getSHPerSplat());
+            this.getColorSHDataArrays(shData);
+            console.log(shData);
+
+            const shTexSize = computeDataTextureSize(SH_COLORS_ELEMENTS_PER_TEXEL, PlyShHeader.getSHPerSplat());
+            const paddedSHData = new Float32Array(shTexSize.x * shTexSize.y * SH_COLORS_ELEMENTS_PER_TEXEL);
+            paddedSHData.set(shData);
+            const shTex = new THREE.DataTexture(paddedSHData, shTexSize.x, shTexSize.y, THREE.RGBAFormat, THREE.FloatType);
+            shTex.needsUpdate = true;
+            this.material.uniforms.shDataTexture.value = shTex;
+            this.material.uniforms.shDataTextureSize.value.copy(shTexSize);
+            this.material.uniforms.shDegree.value = this.shDegree;
+            this.material.uniformsNeedUpdate = true;
+
+            this.splatDataTextures['baseData']['shData'] = shData;
+            this.splatDataTextures['shData'] = {
+                'data': paddedSHData,
+                'texture': shTex,
+                'size': shTexSize,
+            };
+        }
+
         if (this.dynamicMode) {
             const transformIndexesTexSize = computeDataTextureSize(TRANSFORM_INDEXES_ELEMENTS_PER_TEXEL, 4);
             const paddedTransformIndexes = new Uint32Array(transformIndexesTexSize.x *
@@ -1031,6 +1147,26 @@ export class SplatMesh extends THREE.Mesh {
             this.updateDataTexture(paddedCenterColors, centerColorsTextureDescriptor, centerColorsTextureProps,
                                     CENTER_COLORS_ELEMENTS_PER_TEXEL, CENTER_COLORS_ELEMENTS_PER_SPLAT, 4,
                                     this.lastBuildSplatCount, splatCount - 1);
+        }
+
+        if (1 <= this.shDegree) {
+            this.getColorSHDataArrays(this.splatDataTextures.baseData.shData, undefined, this.lastBuildSplatCount, splatCount - 1, this.lastBuildSplatCount);
+            const shTextureDescriptor = this.splatDataTextures['shData'];
+            const paddedSHData = shTextureDescriptor.data;
+            const shTexture = shTextureDescriptor.texture;
+            const shDataStartSplat = this.lastBuildSplatCount * PlyShHeader.getSHPerSplat();
+            const shDataEndSplat = splatCount * PlyShHeader.getSHPerSplat();
+            for (let i = shDataStartSplat; i < shDataEndSplat; i++) {
+                paddedSHData[i] = this.splatDataTextures.baseData.shData[i];
+            }
+            const shTextureProps = this.renderer ? this.renderer.properties.get(shTexture) : null;
+            if (!shTextureProps || !shTextureProps.__webglTexture) {
+                shTexture.needsUpdate = true;
+            } else {
+                this.updateDataTexture(paddedSHData, shTextureDescriptor, shTextureProps,
+                    SH_COLORS_ELEMENTS_PER_TEXEL, PlyShHeader.getSHPerSplat(), 4,
+                    this.lastBuildSplatCount, splatCount - 1);
+            }
         }
 
         if (this.dynamicMode) {
@@ -1104,7 +1240,7 @@ export class SplatMesh extends THREE.Mesh {
         const splatCount = this.getSplatCount();
         const tempCenter = new THREE.Vector3();
         if (!sinceLastBuildOnly) {
-            const avgCenter = new THREE.Vector3();
+            const avgCenter = new THREE.Vector3(this.controlsTargetVector.x, this.controlsTargetVector.y, this.controlsTargetVector.z);
             this.scenes.forEach((scene) => {
                 avgCenter.add(scene.splatBuffer.sceneCenter);
             });
@@ -1784,6 +1920,26 @@ export class SplatMesh extends THREE.Mesh {
             if (centers) splatBuffer.fillSplatCenterArray(centers, sceneTransform, srcStart, srcEnd, destStart);
             if (colors) splatBuffer.fillSplatColorArray(colors, scene.minimumAlpha, sceneTransform, srcStart, srcEnd, destStart);
             destStart += splatBuffer.getSplatCount();
+        }
+    }
+
+    getColorSHDataArrays(shData, applySceneTransform = undefined, srcStart, srcEnd, destStart = 0) {
+        for (let i = 0; i < this.scenes.length; i++) {
+            if (applySceneTransform === undefined || applySceneTransform === null) {
+                applySceneTransform = this.dynamicMode ? false : true;
+            }
+
+            const scene = this.getScene(i);
+            const splatBuffer = scene.splatBuffer;
+
+            splatBuffer.fillSplatSHDataArray(shData, srcStart, srcEnd, destStart);
+            destStart += splatBuffer.getSplatCount();
+        }
+    }
+
+    getColorSHDegree(splatBuffers) {
+        if (1 <= splatBuffers.length) {
+            this.shDegree = splatBuffers[0].shDegree;
         }
     }
 

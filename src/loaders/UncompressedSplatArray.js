@@ -15,7 +15,8 @@ export class UncompressedSplatArray {
         FDC0: 10,
         FDC1: 11,
         FDC2: 12,
-        OPACITY: 13
+        OPACITY: 13,
+        F_REST: 14,
     };
 
     constructor() {

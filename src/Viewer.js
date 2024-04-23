@@ -284,6 +284,9 @@ export class Viewer {
             this.renderer.setClearColor(new THREE.Color( 0x000000 ), 0.0);
             this.renderer.setSize(renderDimensions.x, renderDimensions.y);
 
+            // tone mapping
+            this.renderer.toneMapping = THREE.NoToneMapping;
+
             this.resizeObserver = new ResizeObserver(() => {
                 this.getRenderDimensions(renderDimensions);
                 this.renderer.setSize(renderDimensions.x, renderDimensions.y);
@@ -339,6 +342,9 @@ export class Viewer {
                 }
             }
             this.controls = this.camera.isOrthographicCamera ? this.orthographicControls : this.perspectiveControls;
+
+            // set object center for use SceneRevealMode center.
+            this.splatMesh.controlsTargetVector = this.controls.target;
         }
     }
 
@@ -370,6 +376,10 @@ export class Viewer {
 
     setRenderMode(renderMode) {
         this.renderMode = renderMode;
+    }
+
+    setToneMapping(tone) {
+        this.renderer.toneMapping = tone;
     }
 
     onKeyDown = function() {

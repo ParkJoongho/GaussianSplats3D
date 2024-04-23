@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { UncompressedSplatArray } from './UncompressedSplatArray.js';
 import { clamp } from '../Util.js';
+import { PlyShHeader } from './ply/PlyShHeader.js';
 
 /**
  * SplatBuffer: Container for splat data from a single scene/file and capable of (mediocre) compression.
@@ -311,6 +312,34 @@ export class SplatBuffer {
         }
     }
 
+    fillSplatSHDataArray(shData, srcFrom, srcTo, destFrom) {
+        const splatCount = this.splatCount;
+
+        srcFrom = srcFrom || 0;
+        srcTo = srcTo || splatCount - 1;
+        if (destFrom === undefined) destFrom = srcFrom;
+
+        for (let i = srcFrom; i <= srcTo; i++) {
+
+            const sectionIndex = this.globalSplatIndexToSectionMap[i];
+            const section = this.sections[sectionIndex];
+            const localSplatIndex = i - section.splatCountOffset;
+
+            const colorDestBase = (i - srcFrom + destFrom) * PlyShHeader.getSHPerSplat();
+
+            // xyz(3) + scale(3) + rot(4) + opacity(1) + f_dc0~2(3) + f_rest(45) = 59
+            const startIdx = localSplatIndex * (3 + 3 + 4 + 1 + 45);
+            const shIndex = startIdx + (3 + 3 + 4 + 1);
+
+            for (let i = 0; i < PlyShHeader.getSHPerSplat() / 4; i++) {
+                shData[colorDestBase + (i * 4)] = section.dataArrayFloat32[shIndex + (i * 3)];
+                shData[colorDestBase + (i * 4) + 1] = section.dataArrayFloat32[shIndex + (i * 3) + 1];
+                shData[colorDestBase + (i * 4) + 2] = section.dataArrayFloat32[shIndex + (i * 3) + 2];
+                shData[colorDestBase + (i * 4) + 3] = 1; // dummy alpha. because adjust of texture data type(rgba).
+            }
+        }
+    }
+
     static parseHeader(buffer) {
         const headerArrayUint8 = new Uint8Array(buffer, 0, SplatBuffer.HeaderSizeBytes);
         const headerArrayUint16 = new Uint16Array(buffer, 0, SplatBuffer.HeaderSizeBytes / 2);
@@ -324,6 +353,7 @@ export class SplatBuffer {
         const splatCount = headerArrayUint32[4];
         const compressionLevel = headerArrayUint16[10];
         const sceneCenter = new THREE.Vector3(headerArrayFloat32[6], headerArrayFloat32[7], headerArrayFloat32[8]);
+        const shDegree = headerArrayUint8[2];
 
         return {
             versionMajor,
@@ -333,7 +363,8 @@ export class SplatBuffer {
             maxSplatCount,
             splatCount,
             compressionLevel,
-            sceneCenter
+            sceneCenter,
+            shDegree,
         };
     }
 
@@ -350,7 +381,7 @@ export class SplatBuffer {
         const headerArrayUint16 = new Uint16Array(buffer);
         headerArrayUint8[0] = header.versionMajor;
         headerArrayUint8[1] = header.versionMinor;
-        headerArrayUint8[2] = 0; // unused for now
+        headerArrayUint8[2] = header.shDegree;
         headerArrayUint8[3] = 0; // unused for now
         headerArrayUint32[1] = header.maxSectionCount;
         headerArrayUint32[2] = header.sectionCount;
@@ -465,12 +496,17 @@ export class SplatBuffer {
         this.splatCount = secLoadedCountsToMax ? header.maxSplatCount : 0;
         this.compressionLevel = header.compressionLevel;
         this.sceneCenter = new THREE.Vector3().copy(header.sceneCenter);
+        this.shDegree = header.shDegree;
 
         this.bytesPerCenter = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerCenter;
         this.bytesPerScale = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerScale;
         this.bytesPerRotation = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerRotation;
         this.bytesPerColor = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerColor;
         this.bytesPerSplat = this.bytesPerCenter + this.bytesPerScale + this.bytesPerRotation + this.bytesPerColor;
+
+        if (0 < this.shDegree) {
+            this.bytesPerSplat += PlyShHeader.getSizeOfBytes();
+        }
 
         this.float32PerSplat = this.bytesPerSplat / 4;
         this.uint32PerSplat = this.bytesPerSplat / 4;
@@ -727,7 +763,8 @@ export class SplatBuffer {
             maxSplatCount: totalSplatCount,
             splatCount: totalSplatCount,
             compressionLevel: compressionLevel,
-            sceneCenter: sceneCenter
+            sceneCenter: sceneCenter,
+            shDegree: 0,
         }, unifiedBuffer);
 
         let currentUnifiedBase = SplatBuffer.HeaderSizeBytes;

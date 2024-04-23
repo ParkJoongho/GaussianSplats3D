@@ -47,7 +47,8 @@ export class SplatLoader {
                         maxSplatCount: maxSplatCount,
                         splatCount: splatCount,
                         compressionLevel: 0,
-                        sceneCenter: new THREE.Vector3()
+                        sceneCenter: new THREE.Vector3(),
+                        shDegree: 0,
                     }, streamBufferOut);
                 }
 

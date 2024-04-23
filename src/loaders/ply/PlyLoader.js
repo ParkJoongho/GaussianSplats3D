@@ -6,6 +6,7 @@ import { SplatBuffer } from '../SplatBuffer.js';
 import { SplatBufferGenerator } from '../SplatBufferGenerator.js';
 import { LoaderStatus } from '../LoaderStatus.js';
 import { Constants } from '../../Constants.js';
+import { PlyShHeader } from './PlyShHeader.js';
 
 function storeChunksInBuffer(chunks, buffer) {
     let inBytes = 0;
@@ -43,6 +44,7 @@ export class PlyLoader {
         let headerLoaded = false;
         let readyToLoadSplatData = false;
         let compressed = false;
+        let shDegree = 0;
 
         let streamLoadCompleteResolver;
         let streamLoadPromise = new Promise((resolve) => {
@@ -77,6 +79,7 @@ export class PlyLoader {
                     if (PlyParser.checkTextForEndHeader(headerText)) {
                         header = PlyParser.decodeHeaderText(headerText);
                         compressed = header.compressed;
+                        PlyShHeader.setShDegree(header.shDegree);
 
                         if (compressed) {
                             header = CompressedPlyParser.decodeHeaderText(headerText);
@@ -86,7 +89,11 @@ export class PlyLoader {
                             readyToLoadSplatData = true;
                         }
 
-                        const splatBufferSizeBytes = splatDataOffsetBytes + SplatBuffer.CompressionLevels[0].BytesPerSplat * maxSplatCount;
+                        let splatBufferSizeBytes = splatDataOffsetBytes + SplatBuffer.CompressionLevels[0].BytesPerSplat;
+                        if (0 < header.shDegree) {
+                            splatBufferSizeBytes += PlyShHeader.getSizeOfBytes();
+                        }
+                        splatBufferSizeBytes *= maxSplatCount;
                         streamBufferOut = new ArrayBuffer(splatBufferSizeBytes);
                         SplatBuffer.writeHeaderToBuffer({
                             versionMajor: SplatBuffer.CurrentMajorVersion,
@@ -96,7 +103,8 @@ export class PlyLoader {
                             maxSplatCount: maxSplatCount,
                             splatCount: splatCount,
                             compressionLevel: 0,
-                            sceneCenter: new THREE.Vector3()
+                            sceneCenter: new THREE.Vector3(),
+                            shDegree: header.shDegree
                         }, streamBufferOut);
 
                         numBytesStreamed = header.headerSizeBytes;
@@ -130,7 +138,11 @@ export class PlyLoader {
                             const parsedDataViewOffset = numBytesParsed - chunks[0].startBytes;
                             const dataToParse = new DataView(streamBufferIn, parsedDataViewOffset, numBytesToParse);
 
-                            const outOffset = splatCount * SplatBuffer.CompressionLevels[0].BytesPerSplat + splatDataOffsetBytes;
+                            let outOffset = SplatBuffer.CompressionLevels[0].BytesPerSplat;
+                            if (0 < header.shDegree) {
+                                outOffset += PlyShHeader.getSizeOfBytes();
+                            }
+                            outOffset = splatCount * outOffset + splatDataOffsetBytes;
 
                             if (compressed) {
                                 CompressedPlyParser.parseToUncompressedSplatBufferSection(header.chunkElement, header.vertexElement, 0,

@@ -3,6 +3,7 @@ import { UncompressedSplatArray } from '../UncompressedSplatArray.js';
 import { CompressedPlyParser } from './CompressedPlyParser.js';
 import { SplatBuffer } from '../SplatBuffer.js';
 import { clamp } from '../../Util.js';
+import { PlyShHeader } from './PlyShHeader.js';
 
 export class PlyParser {
 
@@ -32,6 +33,7 @@ export class PlyParser {
         let splatCount = 0;
         let propertyTypes = {};
         let compressed = false;
+        let shDegree = 0;
 
         for (let i = 0; i < headerLines.length; i++) {
             const line = headerLines[i].trim();
@@ -49,6 +51,14 @@ export class PlyParser {
                     const propertyType = propertyMatch[2];
                     const propertyName = propertyMatch[3];
                     propertyTypes[propertyName] = propertyType;
+
+                    if (propertyName === 'f_rest_0') {
+                        shDegree = 1;
+                    } else if (propertyName === 'f_rest_9') {
+                        shDegree = 2;
+                    } else if (propertyName === 'f_rest_24') {
+                        shDegree = 3;
+                    }
                 }
             } else if (line === PlyParser.HeaderEndToken) {
                 break;
@@ -83,7 +93,8 @@ export class PlyParser {
             'headerLines': prunedLines,
             'headerSizeBytes': headerText.indexOf(PlyParser.HeaderEndToken) + PlyParser.HeaderEndToken.length + 1,
             'bytesPerSplat': bytesPerSplat,
-            'fieldOffsets': fieldOffsets
+            'fieldOffsets': fieldOffsets,
+            'shDegree': shDegree
         };
     }
 
@@ -130,7 +141,11 @@ export class PlyParser {
         const outBytesPerCenter = SplatBuffer.CompressionLevels[0].BytesPerCenter;
         const outBytesPerScale = SplatBuffer.CompressionLevels[0].BytesPerScale;
         const outBytesPerRotation = SplatBuffer.CompressionLevels[0].BytesPerRotation;
-        const outBytesPerSplat = SplatBuffer.CompressionLevels[0].BytesPerSplat;
+        let outBytesPerSplat = SplatBuffer.CompressionLevels[0].BytesPerSplat;
+
+        if (0 < header.shDegree) {
+            outBytesPerSplat += PlyShHeader.getSizeOfBytes();
+        }
 
         for (let i = fromSplat; i <= toSplat; i++) {
 
@@ -159,6 +174,15 @@ export class PlyParser {
             outColor[1] = parsedSplat[UncompressedSplatArray.OFFSET.FDC1];
             outColor[2] = parsedSplat[UncompressedSplatArray.OFFSET.FDC2];
             outColor[3] = parsedSplat[UncompressedSplatArray.OFFSET.OPACITY];
+
+            // added SH data
+            if (parsedSplat[UncompressedSplatArray.OFFSET.F_REST] !== 'undefined') {
+                const outFrest = new Float32Array(toBuffer, outBase + outBytesPerCenter + outBytesPerScale + outBytesPerRotation + 4, PlyShHeader.getSize());
+
+                for (let j = 0, m = PlyShHeader.getSize(); j < m; j++) {
+                    outFrest[j] = parsedSplat[UncompressedSplatArray.OFFSET.F_REST + j];
+                }
+            }
         }
     }
 
@@ -168,8 +192,13 @@ export class PlyParser {
         const tempRotation = new THREE.Quaternion();
 
         return function(vertexData, row, header, vertexDataOffset = 0) {
+            let fields = PlyParser.Fields;
+            if (0 < header.shDegree) {
+                fields = fields.concat(PlyShHeader.getSHHeaders());
+            }
+
             PlyParser.readRawVertexFast(vertexData, row * header.bytesPerSplat + vertexDataOffset, header.fieldOffsets,
-                                        PlyParser.Fields, header.propertyTypes, rawVertex);
+                                        fields, header.propertyTypes, rawVertex);
             const newSplat = UncompressedSplatArray.createSplat();
             if (rawVertex['scale_0'] !== undefined) {
                 newSplat[UncompressedSplatArray.OFFSET.SCALE0] = Math.exp(rawVertex['scale_0']);
@@ -215,6 +244,19 @@ export class PlyParser {
             newSplat[UncompressedSplatArray.OFFSET.X] = rawVertex['x'];
             newSplat[UncompressedSplatArray.OFFSET.Y] = rawVertex['y'];
             newSplat[UncompressedSplatArray.OFFSET.Z] = rawVertex['z'];
+
+            let nRestCoeffs = 0;
+            for (const propertyName in header.propertyTypes) {
+                if (propertyName.startsWith('f_rest_')) {
+                    nRestCoeffs += 1;
+                }
+            }
+            const nCoeffsPerColors = nRestCoeffs / 3;
+            for (let i = 0; i < nCoeffsPerColors; ++i) {
+                for (let rgb = 0; rgb < 3; rgb++) {
+                    newSplat[UncompressedSplatArray.OFFSET.F_REST + (i * 3 + rgb)] = rawVertex[`f_rest_${rgb * nCoeffsPerColors + i}`];
+                }
+            }
 
             return newSplat;
         };

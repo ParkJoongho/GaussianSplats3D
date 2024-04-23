@@ -77,8 +77,8 @@ function sortWorker(self) {
 
     self.onmessage = (e) => {
         if (e.data.centers) {
-            centers = e.data.centers;
-            transformIndexes = e.data.transformIndexes;
+            const centers = e.data.centers;
+            const transformIndexes = e.data.transformIndexes;
             if (integerBasedSort) {
                 new Int32Array(wasmMemory, centersOffset + e.data.range.from * Constants.BytesPerInt * 4,
                                e.data.range.count * 4).set(new Int32Array(centers));
@@ -87,8 +87,8 @@ function sortWorker(self) {
                                  e.data.range.count * 4).set(new Float32Array(centers));
             }
             if (dynamicMode) {
-                new Uint32Array(wasmMemory, transformIndexesOffset + e.data.range.from * 4,
-                                e.data.range.count).set(new Uint32Array(transformIndexes));
+                new Uint32Array(wasmMemory, transformIndexesOffset + e.data.range.from * Constants.BytesPerInt * 4,
+                                e.data.range.count * 4).set(new Uint32Array(transformIndexes));
             }
             self.postMessage({
                 'centerDataSet': true,
