@@ -44,7 +44,6 @@ export class PlyLoader {
         let headerLoaded = false;
         let readyToLoadSplatData = false;
         let compressed = false;
-        let shDegree = 0;
 
         let streamLoadCompleteResolver;
         let streamLoadPromise = new Promise((resolve) => {

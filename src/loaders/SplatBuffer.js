@@ -323,18 +323,25 @@ export class SplatBuffer {
 
             const sectionIndex = this.globalSplatIndexToSectionMap[i];
             const section = this.sections[sectionIndex];
+            const sectionFloatArray = this.compressionLevel === 1 ? section.dataArrayUint16 : section.dataArrayFloat32;
             const localSplatIndex = i - section.splatCountOffset;
-
             const colorDestBase = (i - srcFrom + destFrom) * PlyShHeader.getSHPerSplat();
 
-            // xyz(3) + scale(3) + rot(4) + opacity(1) + f_dc0~2(3) + f_rest(45) = 59
-            const startIdx = localSplatIndex * (3 + 3 + 4 + 1 + 45);
-            const shIndex = startIdx + (3 + 3 + 4 + 1);
+            let startIdx = 0;
+            let shIndex = 0;
+            if (1 === this.compressionLevel) {
+                startIdx = localSplatIndex * (3 + 3 + 4 + 2 + 45);
+                shIndex = startIdx + (3 + 3 + 4 + 2);
+            } else {
+                // xyz(3) + scale(3) + rot(4) + opacity(1) + f_rest(45) = 56
+                startIdx = localSplatIndex * (3 + 3 + 4 + 1 + 45);
+                shIndex = startIdx + (3 + 3 + 4 + 1);
+            }
 
             for (let i = 0; i < PlyShHeader.getSHPerSplat() / 4; i++) {
-                shData[colorDestBase + (i * 4)] = section.dataArrayFloat32[shIndex + (i * 3)];
-                shData[colorDestBase + (i * 4) + 1] = section.dataArrayFloat32[shIndex + (i * 3) + 1];
-                shData[colorDestBase + (i * 4) + 2] = section.dataArrayFloat32[shIndex + (i * 3) + 2];
+                shData[colorDestBase + (i * 4)] = this.fbf(sectionFloatArray[shIndex + (i * 3)]);
+                shData[colorDestBase + (i * 4) + 1] = this.fbf(sectionFloatArray[shIndex + (i * 3) + 1]);
+                shData[colorDestBase + (i * 4) + 2] = this.fbf(sectionFloatArray[shIndex + (i * 3) + 2]);
                 shData[colorDestBase + (i * 4) + 3] = 1; // dummy alpha. because adjust of texture data type(rgba).
             }
         }
@@ -567,8 +574,12 @@ export class SplatBuffer {
         const bytesPerScale = SplatBuffer.CompressionLevels[compressionLevel].BytesPerScale;
         const bytesPerRotation = SplatBuffer.CompressionLevels[compressionLevel].BytesPerRotation;
         const bytesPerColor = SplatBuffer.CompressionLevels[compressionLevel].BytesPerColor;
-        const bytesPerSplat = bytesPerCenter + bytesPerScale + bytesPerRotation + bytesPerColor;
+        let bytesPerSplat = bytesPerCenter + bytesPerScale + bytesPerRotation + bytesPerColor;
         const compressionScaleRange = SplatBuffer.CompressionLevels[compressionLevel].ScaleRange;
+
+        if (0 < PlyShHeader.getShDegree()) {
+           bytesPerSplat += PlyShHeader.getSizeOfBytes();
+        }
 
         const sectionBuffers = [];
         const sectionHeaderBuffers = [];
@@ -596,7 +607,7 @@ export class SplatBuffer {
                     alpha = 255;
                 }
                 if (alpha >= minimumAlpha) {
-                    validSplats.addSplatFromComonents(targetSplat[UncompressedSplatArray.OFFSET.X],
+                    const splat = validSplats.addSplatFromComonents(targetSplat[UncompressedSplatArray.OFFSET.X],
                                                       targetSplat[UncompressedSplatArray.OFFSET.Y],
                                                       targetSplat[UncompressedSplatArray.OFFSET.Z],
                                                       targetSplat[UncompressedSplatArray.OFFSET.SCALE0],
@@ -610,6 +621,19 @@ export class SplatBuffer {
                                                       targetSplat[UncompressedSplatArray.OFFSET.FDC1],
                                                       targetSplat[UncompressedSplatArray.OFFSET.FDC2],
                                                       targetSplat[UncompressedSplatArray.OFFSET.OPACITY]);
+
+                    if (targetSplat[UncompressedSplatArray.OFFSET.F_REST] !== 'undefined') {
+                        try {
+                            for (let i = 0; i < PlyShHeader.getSize(); i++) {
+                                splat.push(targetSplat[UncompressedSplatArray.OFFSET.F_REST + i]);
+                            }
+                        } catch (e) {
+                            // not exist offset f_rest_x.. continue.
+                            console.log(e);
+                        }
+                    }
+
+                    validSplats.addSplat(splat);
                 }
             }
 
@@ -644,6 +668,7 @@ export class SplatBuffer {
                     const scaleBase = centerBase + bytesPerCenter;
                     const rotationBase = scaleBase + bytesPerScale;
                     const colorBase = rotationBase + bytesPerRotation;
+
                     if (compressionLevel === 0) {
                         const center = new Float32Array(sectionBuffer, centerBase, SplatBuffer.CenterComponentCount);
                         const rot = new Float32Array(sectionBuffer, rotationBase, SplatBuffer.RotationComponentCount);
@@ -665,6 +690,23 @@ export class SplatBuffer {
                         center.set([targetSplat[UncompressedSplatArray.OFFSET.X],
                                     targetSplat[UncompressedSplatArray.OFFSET.Y],
                                     targetSplat[UncompressedSplatArray.OFFSET.Z]]);
+
+                        if (0 < PlyShHeader.getShDegree()) {
+                            const shBase = colorBase + bytesPerColor;
+                            const sh = new Float32Array(sectionBuffer, shBase, PlyShHeader.getSize());
+
+                            if (targetSplat[UncompressedSplatArray.OFFSET.F_REST] !== undefined) {
+                                try {
+                                    for (let i = 0; i < PlyShHeader.getSize(); i++) {
+                                        sh[i] = targetSplat[UncompressedSplatArray.OFFSET.F_REST + i];
+                                    }
+                                } catch (e) {
+                                    console.log(sectionBuffer, shBase);
+
+                                    return;
+                                }
+                            }
+                        }
                     } else {
                         const center = new Uint16Array(sectionBuffer, centerBase, SplatBuffer.CenterComponentCount);
                         const rot = new Uint16Array(sectionBuffer, rotationBase, SplatBuffer.RotationComponentCount);
@@ -694,6 +736,23 @@ export class SplatBuffer {
                         bucketCenterDelta.z = Math.round(bucketCenterDelta.z * compressionScaleFactor) + compressionScaleRange;
                         bucketCenterDelta.z = clamp(bucketCenterDelta.z, 0, doubleCompressionScaleRange);
                         center.set([bucketCenterDelta.x, bucketCenterDelta.y, bucketCenterDelta.z]);
+
+                        if (0 < PlyShHeader.getShDegree()) {
+                            const shBase = colorBase + bytesPerColor;
+                            const sh = new Uint16Array(sectionBuffer, shBase, PlyShHeader.getSize());
+
+                            if (targetSplat[UncompressedSplatArray.OFFSET.F_REST] !== undefined) {
+                                try {
+                                    for (let i = 0; i < PlyShHeader.getSize(); i++) {
+                                        sh[i] = thf(targetSplat[UncompressedSplatArray.OFFSET.F_REST + i]);
+                                    }
+                                } catch (e) {
+                                    console.log(sectionBuffer, shBase);
+
+                                    return;
+                                }
+                            }
+                        }
                     }
 
                     const rgba = new Uint8ClampedArray(sectionBuffer, colorBase, 4);
@@ -764,7 +823,7 @@ export class SplatBuffer {
             splatCount: totalSplatCount,
             compressionLevel: compressionLevel,
             sceneCenter: sceneCenter,
-            shDegree: 0,
+            shDegree: PlyShHeader.getShDegree(),
         }, unifiedBuffer);
 
         let currentUnifiedBase = SplatBuffer.HeaderSizeBytes;
@@ -779,6 +838,7 @@ export class SplatBuffer {
         }
 
         const splatBuffer = new SplatBuffer(unifiedBuffer);
+
         return splatBuffer;
     }
 

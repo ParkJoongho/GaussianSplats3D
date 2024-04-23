@@ -102,7 +102,6 @@ export class SplatMesh extends THREE.Mesh {
 
         this.splatScale = 1.0;
         this.pointCloudModeEnabled = false;
-        this.shDegree = 0;
 
         this.disposed = false;
         this.lastRenderer = null;
@@ -759,8 +758,6 @@ export class SplatMesh extends THREE.Mesh {
         this.sceneOptions = sceneOptions;
         this.finalBuild = finalBuild;
 
-        this.getColorSHDegree(splatBuffers);
-
         const maxSplatCount = SplatMesh.getTotalMaxSplatCountForSplatBuffers(splatBuffers);
 
         const newScenes = SplatMesh.buildScenes(splatBuffers, sceneOptions);
@@ -1066,10 +1063,9 @@ export class SplatMesh extends THREE.Mesh {
         };
 
         // set up shData texture
-        if (1 <= this.shDegree) {
+        if (1 <= PlyShHeader.getShDegree()) {
             const shData = new Float32Array(maxSplatCount * PlyShHeader.getSHPerSplat());
             this.getColorSHDataArrays(shData);
-            console.log(shData);
 
             const shTexSize = computeDataTextureSize(SH_COLORS_ELEMENTS_PER_TEXEL, PlyShHeader.getSHPerSplat());
             const paddedSHData = new Float32Array(shTexSize.x * shTexSize.y * SH_COLORS_ELEMENTS_PER_TEXEL);
@@ -1078,7 +1074,7 @@ export class SplatMesh extends THREE.Mesh {
             shTex.needsUpdate = true;
             this.material.uniforms.shDataTexture.value = shTex;
             this.material.uniforms.shDataTextureSize.value.copy(shTexSize);
-            this.material.uniforms.shDegree.value = this.shDegree;
+            this.material.uniforms.shDegree.value = PlyShHeader.getShDegree();
             this.material.uniformsNeedUpdate = true;
 
             this.splatDataTextures['baseData']['shData'] = shData;
@@ -1149,7 +1145,7 @@ export class SplatMesh extends THREE.Mesh {
                                     this.lastBuildSplatCount, splatCount - 1);
         }
 
-        if (1 <= this.shDegree) {
+        if (0 < PlyShHeader.getShDegree()) {
             this.getColorSHDataArrays(this.splatDataTextures.baseData.shData, undefined, this.lastBuildSplatCount, splatCount - 1, this.lastBuildSplatCount);
             const shTextureDescriptor = this.splatDataTextures['shData'];
             const paddedSHData = shTextureDescriptor.data;
@@ -1934,12 +1930,6 @@ export class SplatMesh extends THREE.Mesh {
 
             splatBuffer.fillSplatSHDataArray(shData, srcStart, srcEnd, destStart);
             destStart += splatBuffer.getSplatCount();
-        }
-    }
-
-    getColorSHDegree(splatBuffers) {
-        if (1 <= splatBuffers.length) {
-            this.shDegree = splatBuffers[0].shDegree;
         }
     }
 

@@ -1,3 +1,4 @@
+import { PlyShHeader } from './ply/PlyShHeader.js';
 
 export class UncompressedSplatArray {
 
@@ -45,14 +46,22 @@ export class UncompressedSplatArray {
 
     addSplatFromComonents(x, y, z, scale0, scale1, scale2, rot0, rot1, rot2, rot3, r, g, b, opacity) {
         const newSplat = [x, y, z, scale0, scale1, scale2, rot0, rot1, rot2, rot3, r, g, b, opacity];
-        this.addSplat(newSplat);
+        // this.addSplat(newSplat);
         return newSplat;
     }
 
     addSplatFromArray(src, srcIndex) {
         const srcSplat = src.splats[srcIndex];
-        this.addSplatFromComonents(srcSplat[0], srcSplat[1], srcSplat[2], srcSplat[3], srcSplat[4], srcSplat[5],
+        const newSplat = this.addSplatFromComonents(srcSplat[0], srcSplat[1], srcSplat[2], srcSplat[3], srcSplat[4], srcSplat[5],
                                    srcSplat[6], srcSplat[7], srcSplat[8], srcSplat[9],
                                    srcSplat[10], srcSplat[11], srcSplat[12], srcSplat[13]);
+
+        if (srcSplat[14] !== undefined) {
+            for (let i = 14; i < 14 + PlyShHeader.getSize(); i++) {
+                newSplat.push(srcSplat[i]);
+            }
+        }
+
+        return newSplat;
     }
 }

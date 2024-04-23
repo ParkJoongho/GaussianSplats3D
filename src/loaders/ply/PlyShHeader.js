@@ -18,6 +18,10 @@ export class PlyShHeader {
         this.shDegree = shDegree;
     }
 
+    static getShDegree() {
+        return this.shDegree;
+    }
+
     static getSHHeaders() {
         return PlyShHeader.SH_HEADERS[this.shDegree];
     }

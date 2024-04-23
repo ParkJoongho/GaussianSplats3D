@@ -267,6 +267,8 @@ export class PlyParser {
 
         const header = PlyParser.decodeHeadeFromBuffer(plyBuffer);
 
+        PlyShHeader.setShDegree(header.shDegree);
+
         if (header.compressed) {
 
             return CompressedPlyParser.parseToUncompressedSplatArray(plyBuffer);
