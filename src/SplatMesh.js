@@ -33,7 +33,7 @@ export class SplatMesh extends THREE.Mesh {
 
     constructor(dynamicMode = true, halfPrecisionCovariancesOnGPU = false, devicePixelRatio = 1,
                 enableDistancesComputationOnGPU = true, integerBasedDistancesComputation = false,
-                antialiased = false, maxScreenSpaceSplatSize = 2048, logLevel = LogLevel.None) {
+                antialiased = false, maxScreenSpaceSplatSize = 2048, usePreviewedSplatMesh = false, logLevel = LogLevel.None) {
         super(dummyGeometry, dummyMaterial);
         // Reference to a Three.js renderer
         this.renderer = undefined;
@@ -101,13 +101,28 @@ export class SplatMesh extends THREE.Mesh {
         this.visibleRegionChanging = false;
 
         this.splatScale = 1.0;
-        this.pointCloudModeEnabled = false;
+        this.pointCloudModeEnabled = usePreviewedSplatMesh;
 
         this.disposed = false;
         this.lastRenderer = null;
         this.visible = false;
 
+        this.usePreviewedSplatMesh = usePreviewedSplatMesh;
+        this.name = 'splatMesh';
+
         this.controlsTargetVector = new THREE.Vector3();
+    }
+
+    setName(name) {
+        if (name === this.getName()) {
+            throw new Error('Exist same name of splat mesh.');
+        }
+
+        this.name = name;
+    }
+
+    getName() {
+        return this.name;
     }
 
     /**
@@ -829,7 +844,11 @@ export class SplatMesh extends THREE.Mesh {
             });
         }
 
-        this.visible = (this.scenes.length > 0);
+        if (this.usePreviewedSplatMesh) {
+            this.visible = this.getName() === 'previewedSplatMesh';
+        } else {
+            this.visible = this.scenes.length > 0;
+        }
 
         return dataUpdateResults;
     }
@@ -999,7 +1018,10 @@ export class SplatMesh extends THREE.Mesh {
         } else {
             this.updateDataTextures();
         }
-        this.updateVisibleRegion(sinceLastBuildOnly);
+
+        if ('previewedSplatMesh' === this.getName()) {
+            this.updateVisibleRegion(sinceLastBuildOnly);
+        }
     }
 
     setupDataTextures() {
@@ -1238,9 +1260,9 @@ export class SplatMesh extends THREE.Mesh {
         if (!sinceLastBuildOnly) {
             const avgCenter = new THREE.Vector3(this.controlsTargetVector.x, this.controlsTargetVector.y, this.controlsTargetVector.z);
             this.scenes.forEach((scene) => {
-                avgCenter.add(scene.splatBuffer.sceneCenter);
+                // avgCenter.add(scene.splatBuffer.sceneCenter);
             });
-            avgCenter.multiplyScalar(1.0 / this.scenes.length);
+            // avgCenter.multiplyScalar(1.0 / this.scenes.length);
             this.calculatedSceneCenter.copy(avgCenter);
             this.material.uniforms.sceneCenter.value.copy(this.calculatedSceneCenter);
             this.material.uniformsNeedUpdate = true;
@@ -1280,6 +1302,8 @@ export class SplatMesh extends THREE.Mesh {
         this.material.uniforms.fadeInComplete.value = shaderFadeInComplete;
         this.material.uniformsNeedUpdate = true;
         this.visibleRegionChanging = !fadeInComplete;
+
+        return fadeInPercentage;
     }
 
     /**
