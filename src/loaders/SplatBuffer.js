@@ -503,7 +503,8 @@ export class SplatBuffer {
         this.splatCount = secLoadedCountsToMax ? header.maxSplatCount : 0;
         this.compressionLevel = header.compressionLevel;
         this.sceneCenter = new THREE.Vector3().copy(header.sceneCenter);
-        this.shDegree = header.shDegree;
+
+        PlyShHeader.setShDegree(header.shDegree);
 
         this.bytesPerCenter = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerCenter;
         this.bytesPerScale = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerScale;
@@ -511,7 +512,7 @@ export class SplatBuffer {
         this.bytesPerColor = SplatBuffer.CompressionLevels[this.compressionLevel].BytesPerColor;
         this.bytesPerSplat = this.bytesPerCenter + this.bytesPerScale + this.bytesPerRotation + this.bytesPerColor;
 
-        if (0 < this.shDegree) {
+        if (0 < PlyShHeader.getShDegree()) {
             this.bytesPerSplat += PlyShHeader.getSizeOfBytes();
         }
 
