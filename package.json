@@ -14,9 +14,9 @@
     "scripts": {
         "build": "npm run build-library && npm run build-demo",
         "build-demo": "(if not exist \".\\build\\demo\" mkdir .\\build\\demo) && xcopy /Y /E .\\demo .\\build\\demo && xcopy /Y .\\node_modules\\three\\build\\three.module.js .\\build\\demo\\lib\\",
-        "build-demo-windows": "(if not exist \".\\build\\demo\" mkdir .\\build\\demo) && xcopy /E .\\demo .\\build\\demo && xcopy .\\node_modules\\three\\build\\three.module.js .\\build\\demo\\lib\\",
+        "build-demo-windows": "(if not exist \".\\build\\demo\" mkdir .\\build\\demo) && xcopy /Y /E .\\demo .\\build\\demo && xcopy /Y .\\node_modules\\three\\build\\three.module.js .\\build\\demo\\lib\\",
         "build-library": "npx rollup -c && (if not exist \".\\build\\demo\\lib\" mkdir .\\build\\demo\\lib) && copy /Y .\\build\\gaussian-splats-3d* .\\build\\demo\\lib\\",
-        "build-library-windows": "npx rollup -c && (if not exist \".\\build\\demo\\lib\" mkdir .\\build\\demo\\lib) && copy .\\build\\gaussian-splats-3d* .\\build\\demo\\lib\\",
+        "build-library-windows": "npx rollup -c && (if not exist \".\\build\\demo\\lib\" mkdir .\\build\\demo\\lib) && copy /Y .\\build\\gaussian-splats-3d* .\\build\\demo\\lib\\",
         "build-windows": "npm run build-library-windows && npm run build-demo-windows",
         "watch": "npx npm-watch",
         "demo": "node --watch util/server.js -d ./build/demo",

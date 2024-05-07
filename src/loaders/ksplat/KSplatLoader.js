@@ -144,7 +144,9 @@ export class KSplatLoader {
                         if (numBytesLoaded >= bytesRequiredToReachSectionSplatData) {
                             reachedSections++;
                             const bytesPastSSectionSplatDataStart = numBytesLoaded - bytesRequiredToReachSectionSplatData;
-                            const bytesPerSplat = SplatBuffer.CompressionLevels[header.compressionLevel].BytesPerSplat;
+                            const baseDescriptor = SplatBuffer.CompressionLevels[header.compressionLevel];
+                            const shDesc = baseDescriptor.SphericalHarmonicsDegrees[sectionHeader.sphericalHarmonicsDegree];
+                            const bytesPerSplat = shDesc.BytesPerSplat;
                             let loadedSplatsForSection = Math.floor(bytesPastSSectionSplatDataStart / bytesPerSplat);
                             loadedSplatsForSection = Math.min(loadedSplatsForSection, sectionHeader.maxSplatCount);
                             loadedSplatCount += loadedSplatsForSection;
