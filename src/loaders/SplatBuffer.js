@@ -478,6 +478,7 @@ export class SplatBuffer {
             destArray[destBase] = conversionFunc(srcArray[0]);
             destArray[destBase + 1] = conversionFunc(srcArray[1]);
             destArray[destBase + 2] = conversionFunc(srcArray[2]);
+            destArray[destBase + 3] = 1;
         };
 
         const toUncompressedFloatArray3 = (src, dest, compressionLevel) => {
@@ -516,7 +517,7 @@ export class SplatBuffer {
 
                 const dataView = new DataView(this.bufferData, section.dataBase + srcSplatSHBase);
 
-                const shDestBase = (i - srcFrom + destFrom) * outSphericalHarmonicsComponentsCount;
+                const shDestBase = (i - srcFrom + destFrom) * (outSphericalHarmonicsComponentsCount + 15);
 
                 let compressionLevelForOutputConversion = transform ? 0 : this.compressionLevel;
                 let outputConversionFunc = noop;
@@ -548,8 +549,8 @@ export class SplatBuffer {
                     }
 
                     setOutput3(shOut1, outSphericalHarmonicsArray, shDestBase, outputConversionFunc);
-                    setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 3, outputConversionFunc);
-                    setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 6, outputConversionFunc);
+                    setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 4, outputConversionFunc);
+                    setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 8, outputConversionFunc);
 
                     if (outSphericalHarmonicsDegree >= 2) {
 
@@ -576,11 +577,11 @@ export class SplatBuffer {
                             copy3(shIn5, shOut5);
                         }
 
-                        setOutput3(shOut1, outSphericalHarmonicsArray, shDestBase + 9, outputConversionFunc);
-                        setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 12, outputConversionFunc);
-                        setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 15, outputConversionFunc);
-                        setOutput3(shOut4, outSphericalHarmonicsArray, shDestBase + 18, outputConversionFunc);
-                        setOutput3(shOut5, outSphericalHarmonicsArray, shDestBase + 21, outputConversionFunc);
+                        setOutput3(shOut1, outSphericalHarmonicsArray, shDestBase + 12, outputConversionFunc);
+                        setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 16, outputConversionFunc);
+                        setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 20, outputConversionFunc);
+                        setOutput3(shOut4, outSphericalHarmonicsArray, shDestBase + 24, outputConversionFunc);
+                        setOutput3(shOut5, outSphericalHarmonicsArray, shDestBase + 28, outputConversionFunc);
 
                         // @todo:: sh 3 degree..
 
@@ -616,13 +617,13 @@ export class SplatBuffer {
                                 copy3(shIn7, shOut7);
                             }
 
-                            setOutput3(shOut1, outSphericalHarmonicsArray, shDestBase + 24, outputConversionFunc);
-                            setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 27, outputConversionFunc);
-                            setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 30, outputConversionFunc);
-                            setOutput3(shOut4, outSphericalHarmonicsArray, shDestBase + 33, outputConversionFunc);
-                            setOutput3(shOut5, outSphericalHarmonicsArray, shDestBase + 36, outputConversionFunc);
-                            setOutput3(shOut6, outSphericalHarmonicsArray, shDestBase + 39, outputConversionFunc);
-                            setOutput3(shOut7, outSphericalHarmonicsArray, shDestBase + 42, outputConversionFunc);
+                            setOutput3(shOut1, outSphericalHarmonicsArray, shDestBase + 32, outputConversionFunc);
+                            setOutput3(shOut2, outSphericalHarmonicsArray, shDestBase + 36, outputConversionFunc);
+                            setOutput3(shOut3, outSphericalHarmonicsArray, shDestBase + 40, outputConversionFunc);
+                            setOutput3(shOut4, outSphericalHarmonicsArray, shDestBase + 44, outputConversionFunc);
+                            setOutput3(shOut5, outSphericalHarmonicsArray, shDestBase + 48, outputConversionFunc);
+                            setOutput3(shOut6, outSphericalHarmonicsArray, shDestBase + 52, outputConversionFunc);
+                            setOutput3(shOut7, outSphericalHarmonicsArray, shDestBase + 56, outputConversionFunc);
                         }
                     }
                 }
