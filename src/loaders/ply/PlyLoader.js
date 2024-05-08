@@ -6,7 +6,6 @@ import { SplatBuffer } from '../SplatBuffer.js';
 import { SplatBufferGenerator } from '../SplatBufferGenerator.js';
 import { LoaderStatus } from '../LoaderStatus.js';
 import { Constants } from '../../Constants.js';
-import { PlyShHeader } from './PlyShHeader.js';
 
 function storeChunksInBuffer(chunks, buffer) {
     let inBytes = 0;
@@ -79,7 +78,6 @@ export class PlyLoader {
                         header = PlyParser.decodeHeaderText(headerText);
                         outSphericalHarmonicsDegree = Math.min(outSphericalHarmonicsDegree, header.sphericalHarmonicsDegree);
                         compressed = header.compressed;
-                        PlyShHeader.setShDegree(header.shDegree);
 
                         if (compressed) {
                             header = CompressedPlyParser.decodeHeaderText(headerText);

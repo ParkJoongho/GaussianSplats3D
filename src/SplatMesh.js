@@ -18,7 +18,6 @@ const CENTER_COLORS_ELEMENTS_PER_SPLAT = 4;
 const COVARIANCES_ELEMENTS_PER_TEXEL = 4;
 const CENTER_COLORS_ELEMENTS_PER_TEXEL = 4;
 const TRANSFORM_INDEXES_ELEMENTS_PER_TEXEL = 1;
-const SH_COLORS_ELEMENTS_PER_TEXEL = PlyShHeader.getSHColorPerTexel();
 
 const SCENE_FADEIN_RATE_FAST = 0.012;
 const SCENE_FADEIN_RATE_GRADUAL = 0.003;
@@ -234,6 +233,7 @@ export class SplatMesh extends THREE.Mesh {
             const float SH_C1 = 0.4886025119029199f;
             const float[5] SH_C2 = float[](1.0925484305920792, -1.0925484305920792, 0.31539156525251999, -1.0925484305920792, 0.54627421529603959);
             // @todo:: sh 3 degree..
+            const float[7] SH_C3 = float[](-0.59004358992664352, 2.8906114426405538, -0.45704579946446572, 0.3731763325901154, -0.45704579946446572, 1.4453057213202769, -0.59004358992664352);
             const vec3 vecOnes3 = vec3(1.0, 1.0, 1.0);
 
             void main () {
@@ -269,7 +269,7 @@ export class SplatMesh extends THREE.Mesh {
                 }
 
                 vPosition = position.xy;
-                vec4 color = uintToRGBAVec(sampledCenterColor.r);
+                vColor = uintToRGBAVec(sampledCenterColor.r);
                 
                 /*
                 vec3 direction = splatCenter - cameraPosition;
@@ -360,7 +360,6 @@ export class SplatMesh extends THREE.Mesh {
                         vColor.rgb += SH_C1 * (-sh1 * y + sh2 * z - sh3 * x);
                 `;
 
-                // @todo:: sh 3 degree..
                 if (maxSphericalHarmonicsDegree >= 2) {
 
                     vertexShaderSource += `
@@ -396,6 +395,61 @@ export class SplatMesh extends THREE.Mesh {
                                 (SH_C2[2] * (2.0 * zz - xx - yy)) * sh6 +
                                 (SH_C2[3] * xz) * sh7 +
                                 (SH_C2[4] * (xx - yy)) * sh8;
+                        }
+                    `;
+                }
+
+                // @todo:: sh 3 degree..
+                if (maxSphericalHarmonicsDegree >= 3) {
+
+                    vertexShaderSource += `
+                        if (sphericalHarmonicsDegree >= 3) {
+                            float xx = x * x;
+                            float yy = y * y;
+                            float zz = z * z;
+                            float xy = x * y;
+                            float yz = y * z;
+                            float xz = x * z;
+                            
+                            vec2 shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(6), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH24252627 = texture(sphericalHarmonicsTexture, shUV);
+                            shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(7), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH28293031 = texture(sphericalHarmonicsTexture, shUV);
+                            shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(8), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH32333435 = texture(sphericalHarmonicsTexture, shUV);
+                            shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(9), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH36373839 = texture(sphericalHarmonicsTexture, shUV);
+                            shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(10), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH40414243 = texture(sphericalHarmonicsTexture, shUV);
+                            shUV = getDataUVF(nearestEvenIndex, 2.5, doubleOddOffset + uint(11), sphericalHarmonicsTextureSize);
+                            vec4 sampledSH44 = texture(sphericalHarmonicsTexture, shUV);
+
+                            vec3 sh9 = vec3(sampledSH24252627.rgb) * (1.0 - fOddOffset) + vec3(sampledSH24252627.ba, sampledSH28293031.r) * fOddOffset;
+                            vec3 sh10 = vec3(sampledSH24252627.a, sampledSH28293031.rg) * (1.0 - fOddOffset) + vec3(sampledSH28293031.gba) * fOddOffset;
+                            vec3 sh11 = vec3(sampledSH28293031.ba, sampledSH32333435.r) * (1.0 - fOddOffset) + vec3(sampledSH32333435.rgb) * fOddOffset;
+                            vec3 sh12 = vec3(sampledSH32333435.gba) * (1.0 - fOddOffset) + vec3(sampledSH32333435.a, sampledSH36373839.rg) * fOddOffset;
+                            vec3 sh13 = vec3(sampledSH36373839.rgb) * (1.0 - fOddOffset) + vec3(sampledSH36373839.ba, sampledSH40414243.r) * fOddOffset;
+                            vec3 sh14 = vec3(sampledSH36373839.a, sampledSH40414243.rg) * (1.0 - fOddOffset) + vec3(sampledSH40414243.gba) * fOddOffset;
+                            vec3 sh15 = vec3(sampledSH40414243.ba, sampledSH44.r) * (1.0 - fOddOffset) + vec3(sampledSH44.rgb) * fOddOffset; 
+
+                            if (sphericalHarmonics8BitMode == 1) {
+                                sh9 = sh9 * 2.0 - vecOnes3;
+                                sh10 = sh10 * 2.0 - vecOnes3;
+                                sh11 = sh11 * 2.0 - vecOnes3;
+                                sh12 = sh12 * 2.0 - vecOnes3;
+                                sh13 = sh13 * 2.0 - vecOnes3;
+                                sh14 = sh14 * 2.0 - vecOnes3;
+                                sh15 = sh15 * 2.0 - vecOnes3;
+                            }
+                            
+                            vColor.rgb +=
+                                (SH_C3[0] * y * (3.0f * xx - yy)) * sh9 +
+                                (SH_C3[1] * xy * z) * sh10 +
+                                (SH_C3[2] * y * (4.0f * zz - xx -yy)) * sh11 +
+                                (SH_C3[3] * z * (2.0f * zz - 3.0f * xx - 3.0f * yy)) * sh12 +
+                                (SH_C3[4] * x * (4.0f * zz - xx - yy)) * sh13 +
+                                (SH_C3[5] * z * (xx - yy)) * sh14 +
+                                (SH_C3[6] * x * (xx -3.0f * yy)) * sh15;
                         }
                     `;
                 }
@@ -1228,7 +1282,7 @@ export class SplatMesh extends THREE.Mesh {
                 }
             }
 
-            const textureType = sphericalHarmonicsCompressionLevel === 2 ? THREE.UnsignedByteType : THREE.HalfFloatType;
+            const textureType = sphericalHarmonicsCompressionLevel === 2 ? THREE.UnsignedByteType : sphericalHarmonicsCompressionLevel === 1 ? THREE.HalfFloatType : THREE.FloatType;
             const sphericalHarmonicsTex = new THREE.DataTexture(paddedSHArray, sphericalHarmonicsTexSize.x,
                                                                 sphericalHarmonicsTexSize.y, THREE.RGBAFormat, textureType);
             sphericalHarmonicsTex.needsUpdate = true;
@@ -1365,7 +1419,7 @@ export class SplatMesh extends THREE.Mesh {
     }
 
     getTargetSphericalHarmonicsCompressionLevel() {
-        return Math.max(1, this.getMaximumSplatBufferCompressionLevel());
+        return Math.max(0, this.getMaximumSplatBufferCompressionLevel());
     }
 
     getMaximumSplatBufferCompressionLevel() {

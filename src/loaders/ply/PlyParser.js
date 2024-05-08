@@ -3,7 +3,6 @@ import { UncompressedSplatArray } from '../UncompressedSplatArray.js';
 import { CompressedPlyParser } from './CompressedPlyParser.js';
 import { SplatBuffer } from '../SplatBuffer.js';
 import { clamp } from '../../Util.js';
-import { PlyShHeader } from './PlyShHeader.js';
 
 export class PlyParser {
 
@@ -91,8 +90,8 @@ export class PlyParser {
         let sphericalHarmonicsDegree = 0;
         if (sphericalHarmonicsCoefficientsPerChannel >= 3) sphericalHarmonicsDegree = 1;
         if (sphericalHarmonicsCoefficientsPerChannel >= 8) sphericalHarmonicsDegree = 2;
-
         // @todo:: sh 3 degree..
+        if (sphericalHarmonicsCoefficientsPerChannel >= 15) sphericalHarmonicsDegree = 3;
 
         let sphericalHarmonicsDegree1Fields = [];
         if (sphericalHarmonicsDegree >= 1) {
@@ -111,8 +110,16 @@ export class PlyParser {
                 }
             }
         }
-
         // @todo:: sh 3 degree..
+
+        let sphericalHarmonicsDegree3Fields = [];
+        if (sphericalHarmonicsDegree >= 3) {
+            for (let rgb = 0; rgb < 3; rgb++) {
+                for (let i = 0; i < 7; i++) {
+                    sphericalHarmonicsDegree3Fields.push('f_rest_' + (i + sphericalHarmonicsCoefficientsPerChannel * rgb + 8));
+                }
+            }
+        }
 
         return {
             'splatCount': splatCount,
@@ -126,7 +133,8 @@ export class PlyParser {
             'sphericalHarmonicsDegree': sphericalHarmonicsDegree,
             'sphericalHarmonicsCoefficientsPerChannel': sphericalHarmonicsCoefficientsPerChannel,
             'sphericalHarmonicsDegree1Fields': sphericalHarmonicsDegree1Fields,
-            'sphericalHarmonicsDegree2Fields': sphericalHarmonicsDegree2Fields
+            'sphericalHarmonicsDegree2Fields': sphericalHarmonicsDegree2Fields,
+            'sphericalHarmonicsDegree3Fields': sphericalHarmonicsDegree3Fields
         };
     }
 
@@ -219,6 +227,11 @@ export class PlyParser {
                     }
 
                     // @todo:: sh 3 degree..
+                    if (outSphericalHarmonicsDegree >= 3) {
+                        for (let i = 24; i <= 44; i++) {
+                            outSphericalHarmonics[i] = parsedSplat[UncompressedSplatArray.OFFSET.FRC0 + i];
+                        }
+                    }
                 }
             }
         }
@@ -279,6 +292,11 @@ export class PlyParser {
                         }
 
                         // @todo:: sh 3 degree..
+                        if (outSphericalHarmonicsDegree >= 3) {
+                            for (let i = 0; i < 21; i++) {
+                                newSplat[UncompressedSplatArray.OFFSET.FRC24 + i] = rawVertex[header.sphericalHarmonicsDegree3Fields[i]];
+                            }
+                        }
                     }
                 } else {
                     newSplat[UncompressedSplatArray.OFFSET.FRC0] = 0;
@@ -307,8 +325,6 @@ export class PlyParser {
     static parseToUncompressedSplatArray(plyBuffer, outSphericalHarmonicsDegree = 0) {
 
         const header = PlyParser.decodeHeadeFromBuffer(plyBuffer);
-
-        PlyShHeader.setShDegree(header.shDegree);
 
         if (header.compressed) {
 

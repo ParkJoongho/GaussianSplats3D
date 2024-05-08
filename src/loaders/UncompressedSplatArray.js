@@ -44,6 +44,27 @@ export class UncompressedSplatArray {
         FRC22: 36,
         FRC23: 37,
         // @todo:: sh 3 degree..
+        FRC24: 38,
+        FRC25: 39,
+        FRC26: 40,
+        FRC27: 41,
+        FRC28: 42,
+        FRC29: 43,
+        FRC30: 44,
+        FRC31: 45,
+        FRC32: 46,
+        FRC33: 47,
+        FRC34: 48,
+        FRC35: 49,
+        FRC36: 50,
+        FRC37: 51,
+        FRC38: 52,
+        FRC39: 53,
+        FRC40: 54,
+        FRC41: 55,
+        FRC42: 56,
+        FRC43: 57,
+        FRC44: 58,
     };
 
     constructor(sphericalHarmonicsDegree = 0) {
